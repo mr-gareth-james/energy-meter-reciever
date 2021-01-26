@@ -67,36 +67,26 @@ void setup(void){
   Serial.print(",");
   Serial.println(SensorMaxNumbers[9]);
 }
+
 int oldwheelSpeed=0;
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// LOOP /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void loop(void){ 
-  oldwheelSpeed = wheelSpeed;
-  while (radio.available()){
-    radio.read(&ReceivedMessage, sizeof(ReceivedMessage)); // Read information from the NRF24L01
-    wheelSpeed = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
-  }
 
-  // is wheel speed ifferent? if it is, flash the wheel to reset it
-  if (wheelSpeed!=oldwheelSpeed){
-  oldwheelSpeed=wheelSpeed; // only do this once that the speed changes
-    for(int pp;pp<strip.numPixels();pp++){
-      strip.setPixelColor(pp, strip.Color(50, 50, 0)); // Draw new pixel
-      strip.show(); // upate the leds
+// transforms a colour from_col >>> to_col by t_percent
+// returns a number from 0-255
+int transformColour(int from_col, int to_col, float t_percent){
+   int new_col;
+   
+    if (to_col>from_col){
+       new_col = from_col + ((to_col-from_col)*t_percent); // percent is a 0.0-1.0 float
+    }else if (to_col<from_col){
+      
+       new_col = from_col - ((from_col-to_col)*t_percent); // percent is a 0.0-1.0 float ** correct
     }
-    strip.show(); // upate the leds
-  }
 
-  // ease out the speed
- // int wheelSpeed_easing = wheelSpeed * ((100 - wheelSpeed)/10.00);//********
- // Serial.print(" | wheelSpeed_easing: ");      Serial.print(wheelSpeed_easing);
-   // now do the standard chase
-  chase(wheelSpeed);
-  //chase(wheelSpeed_easing);
-  delay(1);
+    // Serial.println(new_col);
+    return new_col;
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // LIGHTS ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 static void chase(int percentSpeed) {
   
@@ -126,8 +116,6 @@ static void chase(int percentSpeed) {
   counter++; if(counter>pixelsCount){counter=0;}
 }
 
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // PROCESS DATA /////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Processes the raw data from the energy monitor base unit
 // saves Max and Min values over time
@@ -216,29 +204,38 @@ static processData(float sensorData){
 }
 
 
-
-
-// transforms a colour from_col >>> to_col by t_percent
-// returns a number from 0-255
-
-int transformColour(int from_col, int to_col, float t_percent){
-   int new_col;
-   
-    if (to_col>from_col){
-       new_col = from_col + ((to_col-from_col)*t_percent); // percent is a 0.0-1.0 float
-    }else if (to_col<from_col){
-      
-       new_col = from_col - ((from_col-to_col)*t_percent); // percent is a 0.0-1.0 float ** correct
-    }
-
-    // Serial.println(new_col);
-    return new_col;
-}
-
 // reset eeprom
 void reset_eeprom(){
   float SensorMinNumbers[] = {100,100,100,100,100,100,100,100,100,100};
   float SensorMaxNumbers[] = {0,0,0,0,0,0,0,0,0,0};
   EEPROM.put(0, SensorMinNumbers);
   EEPROM.put(50, SensorMaxNumbers);
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// LOOP /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void loop(void){ 
+  oldwheelSpeed = wheelSpeed;
+  while (radio.available()){
+    radio.read(&ReceivedMessage, sizeof(ReceivedMessage)); // Read information from the NRF24L01
+    wheelSpeed = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
+  }
+
+  // is wheel speed ifferent? if it is, flash the wheel to reset it
+  if (wheelSpeed!=oldwheelSpeed){
+  oldwheelSpeed=wheelSpeed; // only do this once that the speed changes
+    for(int pp;pp<strip.numPixels();pp++){
+      strip.setPixelColor(pp, strip.Color(50, 50, 0)); // Draw new pixel
+      strip.show(); // upate the leds
+    }
+    strip.show(); // upate the leds
+  }
+
+  // ease out the speed
+ // int wheelSpeed_easing = wheelSpeed * ((100 - wheelSpeed)/10.00);//********
+ // Serial.print(" | wheelSpeed_easing: ");      Serial.print(wheelSpeed_easing);
+   // now do the standard chase
+  chase(wheelSpeed);
+  //chase(wheelSpeed_easing);
+  delay(1);
 }
