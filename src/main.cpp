@@ -1,10 +1,9 @@
-/* 
-Arduino code that recieves raw data from the base unit/energy sensor
-
+/* Arduino code that recieves raw data from the base unit/energy sensor
 - Recieves raw data
 - Saves high and low averages to understand top speed and slow speed
 - Animates the leds
 */
+
 // EPROM
 #include <EEPROM.h>
 
@@ -16,11 +15,18 @@ float ReceivedMessage[1] = {000}; // Used to store value received by the NRF24L0
 RF24 radio(9,10); // NRF24L01 used SPI pins + Pin 9 and 10 on the UNO
 const uint64_t pipe = 0xE6E6E6E6E6E6; // Needs to be the same for communicating between 2 NRF24L01 
 
-//LIGHTS
+/* //LIGHTS
 #include <Adafruit_NeoPixel.h>
 #define PIN      6
 #define N_LEDS 105
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_LEDS, PIN, NEO_GRB + NEO_KHZ800);
+*/
+
+// fast led
+#include <FastLED.h>
+#define NUM_LEDS 105
+#define DATA_PIN 6
+CRGB leds[NUM_LEDS]; // memory block for leds
 
 int howFarRound=0;//percentage
 uint16_t counter = 0;
@@ -32,9 +38,9 @@ float SensorMinNumbers[] = {100,100,100,100,100,100,100,100,100,100};
 float SensorMaxNumbers[] = {0,0,0,0,0,0,0,0,0,0};
 
 int wheelSpeed = 0;
+int oldwheelSpeed=0;
 int len = sizeof(SensorMaxNumbers)/sizeof(float);
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // SETUP ///////////////////////////////////////////////////////////////////////////////////////////////////
 void setup(void){
   // 
@@ -50,7 +56,7 @@ void setup(void){
   radio.startListening(); // Listen to see if information received
 
   //LIGHTS
-  strip.begin();
+  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
 
   // EEPROM DATA LOAD
   EEPROM.get(0, SensorMinNumbers);  
@@ -68,11 +74,10 @@ void setup(void){
   Serial.println(SensorMaxNumbers[9]);
 }
 
-int oldwheelSpeed=0;
-
-// transforms a colour from_col >>> to_col by t_percent
-// returns a number from 0-255
+// transform colour ///////////////////////////////////////////////////////////////////////////////////////////////////
 int transformColour(int from_col, int to_col, float t_percent){
+  // transforms a colour from_col >>> to_col by t_percent
+  // returns a number from 0-255
    int new_col;
    
     if (to_col>from_col){
@@ -86,11 +91,22 @@ int transformColour(int from_col, int to_col, float t_percent){
     return new_col;
 }
 
+// showDisplay - light animation ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+static void showDisplay(int percentSpeed) {
+  Serial.println("animating"+percentSpeed);
+  for(int dot = 0; dot < NUM_LEDS; dot++) { 
+            leds[dot] = CRGB::Blue;
+            FastLED.show();
+            // clear this led for the next time around the loop
+            leds[dot] = CRGB::Black;
+            delay(30);
+        }
 
-// LIGHTS ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+}
+
+/* chase function
 static void chase(int percentSpeed) {
-  
-  
+
   int resolution = 100 - percentSpeed; // invert the percentage to give us the resolution: as res 100 is slow/high res, res 1 is fast/low res, because the higher the resolution the slower the animation! // higher the res the more pixels in the count, and the slower the animation
   int pixelsCount = strip.numPixels()*resolution;
       
@@ -115,14 +131,16 @@ static void chase(int percentSpeed) {
   // count up, and limit to the pixelsCount, the number of pixels
   counter++; if(counter>pixelsCount){counter=0;}
 }
+*/
 
 // PROCESS DATA /////////////////////////////////////////////////////////////////////////////////////////////////////////////
+static processData(float sensorData){
 // Processes the raw data from the energy monitor base unit
 // saves Max and Min values over time
 // turns it into a percentage //////////////////////////////////////////////////////////////////////////////////////////////
 
-static processData(float sensorData){
-// pre process ata
+
+// pre process data
   if (sensorData<0){sensorData=0.00;} // remove minus readings
   if (sensorData>1000){sensorData=SensorMaxNumbers[0];} // remove stupid high readings
  
@@ -203,8 +221,7 @@ static processData(float sensorData){
   return CurrentReadingPercent;
 }
 
-
-// reset eeprom
+// reset eeprom //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void reset_eeprom(){
   float SensorMinNumbers[] = {100,100,100,100,100,100,100,100,100,100};
   float SensorMaxNumbers[] = {0,0,0,0,0,0,0,0,0,0};
@@ -212,16 +229,24 @@ void reset_eeprom(){
   EEPROM.put(50, SensorMaxNumbers);
 }
 
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// LOOP /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///LOOP //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop(void){ 
+
   oldwheelSpeed = wheelSpeed;
   while (radio.available()){
     radio.read(&ReceivedMessage, sizeof(ReceivedMessage)); // Read information from the NRF24L01
     wheelSpeed = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
   }
+  
+  // use serial to change wheelspeed precentage
+  if ( Serial.available() > 0) {
+    int numBlinks = Serial.parseInt(); //Read the data the user has input
+    Serial.println(numBlinks);
+    wheelSpeed = numBlinks;
+  }
 
-  // is wheel speed ifferent? if it is, flash the wheel to reset it
+/*
+  // is wheel speed different? if it is, flash the wheel to reset it
   if (wheelSpeed!=oldwheelSpeed){
   oldwheelSpeed=wheelSpeed; // only do this once that the speed changes
     for(int pp;pp<strip.numPixels();pp++){
@@ -230,12 +255,11 @@ void loop(void){
     }
     strip.show(); // upate the leds
   }
+*/
 
-  // ease out the speed
- // int wheelSpeed_easing = wheelSpeed * ((100 - wheelSpeed)/10.00);//********
- // Serial.print(" | wheelSpeed_easing: ");      Serial.print(wheelSpeed_easing);
-   // now do the standard chase
-  chase(wheelSpeed);
-  //chase(wheelSpeed_easing);
+  //chase(wheelSpeed); // standard chase - this is the non fastled animation
+
+  showDisplay(wheelSpeed); // new fastled animation
+
   delay(1);
 }
