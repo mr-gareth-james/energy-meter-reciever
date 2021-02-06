@@ -3,7 +3,9 @@
 - Saves high and low averages to understand top speed and slow speed
 - Animates the leds
 */
+float myTweenTimer = 0.00;
 
+int dot=1; // for strip
 // EPROM
 #include <EEPROM.h>
 
@@ -37,8 +39,8 @@ float sensorMax = 100000;
 float SensorMinNumbers[] = {100,100,100,100,100,100,100,100,100,100};
 float SensorMaxNumbers[] = {0,0,0,0,0,0,0,0,0,0};
 
-int wheelSpeed = 0;
-int oldwheelSpeed=0;
+int energyPercentage = 0;
+int oldEnergyPercentage=0;
 int len = sizeof(SensorMaxNumbers)/sizeof(float);
 
 // SETUP ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -91,17 +93,48 @@ int transformColour(int from_col, int to_col, float t_percent){
     return new_col;
 }
 
+// ease the speed number ///////////////////////////////////////////////////////////////////////////////////////////////////
+float easeInOutCubic(float x){
+    return x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2;
+}
+
+uint8_t gHue = 0; // rotating "base color" used by many of the patterns
+
 // showDisplay - light animation ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 static void showDisplay(int percentSpeed) {
-  Serial.println("animating"+percentSpeed);
-  for(int dot = 0; dot < NUM_LEDS; dot++) { 
-            leds[dot] = CRGB::Blue;
-            FastLED.show();
-            // clear this led for the next time around the loop
-            leds[dot] = CRGB::Black;
-            delay(30);
-        }
 
+  int speedDiff = percentSpeed-oldEnergyPercentage; // work out the difference in speed
+  float tweenedSpeed = oldEnergyPercentage + (speedDiff*easeInOutCubic(myTweenTimer));
+
+  Serial.print("animating: "); 
+  Serial.print(percentSpeed/100.00);
+  Serial.print(" myTweenTimer: "); 
+  Serial.print(myTweenTimer);
+  Serial.print(" tweenmultiplier: "); 
+  Serial.print(easeInOutCubic(myTweenTimer));
+  Serial.print(" speedDiff: "); 
+  Serial.print(speedDiff);
+  Serial.print(" tweened percent: "); 
+  Serial.println(tweenedSpeed);
+
+  
+  dot += 1; 
+  if(dot > NUM_LEDS) {dot=0;}
+
+  leds[dot] = CRGB::WhiteSmoke;
+  FastLED.show();
+  // clear this led for the next time around the loop
+  fadeToBlackBy( leds, NUM_LEDS, 20);
+
+   // int pos = random16(NUM_LEDS);
+ // leds[pos] += CHSV( gHue + random8(64), 200, 255);
+
+
+  int pos = beatsin16(13,0,NUM_LEDS);
+  leds[pos] += CHSV( gHue, 255, 192);
+
+  //leds[dot] = CRGB::Black;
+  //delay(100-tweenedSpeed);
 }
 
 /* chase function
@@ -134,11 +167,11 @@ static void chase(int percentSpeed) {
 */
 
 // PROCESS DATA /////////////////////////////////////////////////////////////////////////////////////////////////////////////
-static processData(float sensorData){
+static int processData(float sensorData){
 // Processes the raw data from the energy monitor base unit
 // saves Max and Min values over time
-// turns it into a percentage //////////////////////////////////////////////////////////////////////////////////////////////
-
+// turns it into a percentage of current energy use based on averages //////////////////////////////////////////////////////////////////////////////////////////////
+// this becomes the speed of the animation
 
 // pre process data
   if (sensorData<0){sensorData=0.00;} // remove minus readings
@@ -229,26 +262,44 @@ void reset_eeprom(){
   EEPROM.put(50, SensorMaxNumbers);
 }
 
+
 ///LOOP //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop(void){ 
 
-  oldwheelSpeed = wheelSpeed;
   while (radio.available()){
     radio.read(&ReceivedMessage, sizeof(ReceivedMessage)); // Read information from the NRF24L01
-    wheelSpeed = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
+    energyPercentage = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
   }
   
+    if (myTweenTimer<1)
+    {
+      myTweenTimer+=0.01;
+    }
+  else
+    {
+      myTweenTimer=1;
+    }
+
   // use serial to change wheelspeed precentage
   if ( Serial.available() > 0) {
-    int numBlinks = Serial.parseInt(); //Read the data the user has input
-    Serial.println(numBlinks);
-    wheelSpeed = numBlinks;
-  }
+    int fromSerial = Serial.parseInt(); //Read the data the user has input
+    //Serial.println(fromSerial);
 
+    // save oldWheelSpeed
+    oldEnergyPercentage = energyPercentage;
+    // start timer
+    Serial.println("hello serial detacted //////////////////////////////");
+    myTweenTimer = 0;
+    // set the 
+    energyPercentage = fromSerial;
+  }
+  
+
+  
 /*
   // is wheel speed different? if it is, flash the wheel to reset it
-  if (wheelSpeed!=oldwheelSpeed){
-  oldwheelSpeed=wheelSpeed; // only do this once that the speed changes
+  if (energyPercentage!=oldEnergyPercentage){
+  oldEnergyPercentage=energyPercentage; // only do this once that the speed changes
     for(int pp;pp<strip.numPixels();pp++){
       strip.setPixelColor(pp, strip.Color(50, 50, 0)); // Draw new pixel
       strip.show(); // upate the leds
@@ -257,9 +308,7 @@ void loop(void){
   }
 */
 
-  //chase(wheelSpeed); // standard chase - this is the non fastled animation
+  showDisplay(energyPercentage); // new fastled animation
 
-  showDisplay(wheelSpeed); // new fastled animation
-
-  delay(1);
+  delay(10);
 }
