@@ -3,9 +3,8 @@
 - Saves high and low averages to understand top speed and slow speed
 - Animates the leds
 */
-float myTweenTimer = 0.00;
 
-int dot=1; // for strip
+
 // EPROM
 #include <EEPROM.h>
 
@@ -17,33 +16,36 @@ float ReceivedMessage[1] = {000}; // Used to store value received by the NRF24L0
 RF24 radio(9,10); // NRF24L01 used SPI pins + Pin 9 and 10 on the UNO
 const uint64_t pipe = 0xE6E6E6E6E6E6; // Needs to be the same for communicating between 2 NRF24L01 
 
-/* //LIGHTS
-#include <Adafruit_NeoPixel.h>
-#define PIN      6
-#define N_LEDS 105
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(N_LEDS, PIN, NEO_GRB + NEO_KHZ800);
-*/
-
 // fast led
 #include <FastLED.h>
 #define NUM_LEDS 105
 #define DATA_PIN 6
 CRGB leds[NUM_LEDS]; // memory block for leds
+int dot=1; // for strip
+uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 
-int howFarRound=0;//percentage
-uint16_t counter = 0;
+// frame blending animation 
+#define ANIM_FPS 255
+// the number of steps you want between each frame - should be a power of 2 to keep things sane - e.g. 2,4,8,16,32,64
+int STEPS = 1;
+#define SCALE_PER_STEP (256 / STEPS) 
+CRGB old_frame[NUM_LEDS];
+CRGB next_frame[NUM_LEDS];
+static uint8_t startIndex = 0;
+
+float myTweenTimer = 0.00;
 
 // data setup
 float sensorMin = 100000;
 float sensorMax = 100000;
 float SensorMinNumbers[] = {100,100,100,100,100,100,100,100,100,100};
 float SensorMaxNumbers[] = {0,0,0,0,0,0,0,0,0,0};
-
 int energyPercentage = 0;
 int oldEnergyPercentage=0;
 int len = sizeof(SensorMaxNumbers)/sizeof(float);
 
-// SETUP ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Setup ///////////////////////////////////////////////////////////////////////////////////////////////////
 void setup(void){
   // 
   //reset_eeprom();
@@ -76,21 +78,18 @@ void setup(void){
   Serial.println(SensorMaxNumbers[9]);
 }
 
-// transform colour ///////////////////////////////////////////////////////////////////////////////////////////////////
-int transformColour(int from_col, int to_col, float t_percent){
-  // transforms a colour from_col >>> to_col by t_percent
-  // returns a number from 0-255
-   int new_col;
-   
-    if (to_col>from_col){
-       new_col = from_col + ((to_col-from_col)*t_percent); // percent is a 0.0-1.0 float
-    }else if (to_col<from_col){
-      
-       new_col = from_col - ((from_col-to_col)*t_percent); // percent is a 0.0-1.0 float ** correct
-    }
+// Render next ///////////////////////////////////////////////////////////////////////////////////////////////////
+void render_next_frame() {
+  // draw/copy what you want the next frame to be into the next_frame
 
-    // Serial.println(new_col);
-    return new_col;
+  startIndex = startIndex + 1; // loop through the leds
+  if (startIndex>NUM_LEDS){startIndex=0;}
+  
+  for ( int i = 0; i < NUM_LEDS; i++) {
+    next_frame[i] -= CHSV( 120, 150, 50); // this fades like the fadetoblack with hue
+    if(i==startIndex){next_frame[i] += CHSV( 120, 150, 255); // this lights the next in the loop
+    ;}
+  }
 }
 
 // ease the speed number ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -98,13 +97,12 @@ float easeInOutCubic(float x){
     return x < 0.5 ? 4 * x * x * x : 1 - pow(-2 * x + 2, 3) / 2;
 }
 
-uint8_t gHue = 0; // rotating "base color" used by many of the patterns
-
+/*
 // showDisplay - light animation ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 static void showDisplay(int percentSpeed) {
 
   int speedDiff = percentSpeed-oldEnergyPercentage; // work out the difference in speed
-  float tweenedSpeed = oldEnergyPercentage + (speedDiff*easeInOutCubic(myTweenTimer));
+  float tweenedSpeed = oldEnergyPercentage + (speedDiff*easeInOutCubic(myTweenTimer)); // tween the speed
 
   Serial.print("animating: "); 
   Serial.print(percentSpeed/100.00);
@@ -117,26 +115,20 @@ static void showDisplay(int percentSpeed) {
   Serial.print(" tweened percent: "); 
   Serial.println(tweenedSpeed);
 
-  
+  Serial.println(gHue);
+
   dot += 1; 
   if(dot > NUM_LEDS) {dot=0;}
 
-  leds[dot] = CRGB::WhiteSmoke;
+  int pos = beatsin16(13,0,NUM_LEDS);
+  leds[pos] += CHSV( 0, 255, 128);
+
+  leds[dot] += CHSV( 120, 150, 255); //CRGB::WhiteSmoke;
   FastLED.show();
   // clear this led for the next time around the loop
-  fadeToBlackBy( leds, NUM_LEDS, 20);
-
-   // int pos = random16(NUM_LEDS);
- // leds[pos] += CHSV( gHue + random8(64), 200, 255);
-
-
-  int pos = beatsin16(13,0,NUM_LEDS);
-  leds[pos] += CHSV( gHue, 255, 192);
-
-  //leds[dot] = CRGB::Black;
-  //delay(100-tweenedSpeed);
+  fadeToBlackBy( leds, NUM_LEDS, 10);
 }
-
+*/
 /* chase function
 static void chase(int percentSpeed) {
 
@@ -262,7 +254,6 @@ void reset_eeprom(){
   EEPROM.put(50, SensorMaxNumbers);
 }
 
-
 ///LOOP //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop(void){ 
 
@@ -271,44 +262,52 @@ void loop(void){
     energyPercentage = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
   }
   
-    if (myTweenTimer<1)
-    {
-      myTweenTimer+=0.01;
-    }
-  else
-    {
-      myTweenTimer=1;
-    }
+  if (myTweenTimer<1){
+    myTweenTimer+=0.01;
+  }else{
+    myTweenTimer=1;
+  }
 
   // use serial to change wheelspeed precentage
   if ( Serial.available() > 0) {
     int fromSerial = Serial.parseInt(); //Read the data the user has input
-    //Serial.println(fromSerial);
 
     // save oldWheelSpeed
     oldEnergyPercentage = energyPercentage;
     // start timer
-    Serial.println("hello serial detacted //////////////////////////////");
     myTweenTimer = 0;
     // set the 
     energyPercentage = fromSerial;
   }
   
+// animate! - this is the frameblending script
 
-  
-/*
-  // is wheel speed different? if it is, flash the wheel to reset it
-  if (energyPercentage!=oldEnergyPercentage){
-  oldEnergyPercentage=energyPercentage; // only do this once that the speed changes
-    for(int pp;pp<strip.numPixels();pp++){
-      strip.setPixelColor(pp, strip.Color(50, 50, 0)); // Draw new pixel
-      strip.show(); // upate the leds
+  int speedDiff = energyPercentage-oldEnergyPercentage; // work out the difference in speed from the data
+  float tweenedSpeed = oldEnergyPercentage + (speedDiff*easeInOutCubic(myTweenTimer)); // tween the speed
+  // set speed (steps id the resolution of the frame interpolation)
+  STEPS = 100-tweenedSpeed;
+
+  static uint8_t cur_step;
+  EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * (STEPS)) ) {  //EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * STEPS) ) { 
+    if(cur_step == 0) {
+      for(int i = 0; i < NUM_LEDS; i++) { old_frame[i] = next_frame[i]; }
+      render_next_frame();
     }
-    strip.show(); // upate the leds
+
+    blend(old_frame, next_frame, leds, NUM_LEDS, cur_step * SCALE_PER_STEP);
+    FastLED.show();
+    cur_step++;
+
+    if(cur_step == STEPS) { cur_step = 0; }
+  } else { 
+    // keep driving show for the temporal dithering
+    FastLED.show();
   }
-*/
 
-  showDisplay(energyPercentage); // new fastled animation
+  // this is a bit random here  
+  // its the left right swinging one, 
+  // the rest is animatd in the 'render_next_frame' function
+  int pos = beatsin16(tweenedSpeed/20,0,NUM_LEDS);
+  next_frame[pos] += CHSV( 170, 255, 30);
 
-  delay(10);
 }
