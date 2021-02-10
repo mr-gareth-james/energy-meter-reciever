@@ -89,6 +89,10 @@ void render_next_frame() {
     next_frame[i] -= CHSV( 120, 150, 50); // this fades like the fadetoblack with hue
     if(i==startIndex){next_frame[i] += CHSV( 120, 150, 255); // this lights the next in the loop
     ;}
+    // reverse loop
+    int x = NUM_LEDS-startIndex;
+    if(i==x){next_frame[i] += CHSV( 170, 255, 130); // this lights the next in the loop
+    ;}
   }
 }
 
@@ -313,10 +317,11 @@ void loop(void){
     FastLED.show();
   }
 
+/*
   // this is a bit random here  
   // its the left right swinging one, 
   // the rest is animatd in the 'render_next_frame' function
   int pos = beatsin16(tweenedSpeed/20,0,NUM_LEDS);
   next_frame[pos] += CHSV( 170, 255, 30);
-
+*/
 }
