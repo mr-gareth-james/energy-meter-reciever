@@ -257,10 +257,7 @@ void reset_eeprom(){
 ///LOOP //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop(void){ 
 
-  while (radio.available()){
-    radio.read(&ReceivedMessage, sizeof(ReceivedMessage)); // Read information from the NRF24L01
-    energyPercentage = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
-  }
+
   
   if (myTweenTimer<1){
     myTweenTimer+=0.01;
@@ -268,7 +265,17 @@ void loop(void){
     myTweenTimer=1;
   }
 
-  // use serial to change wheelspeed precentage
+  while (radio.available()){
+    radio.read(&ReceivedMessage, sizeof(ReceivedMessage)); // Read information from the NRF24L01
+    // save oldWheelSpeed
+    oldEnergyPercentage = energyPercentage;
+    // start timer
+    myTweenTimer = 0;
+    // set the 
+    energyPercentage = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
+  }
+
+  // OR use serial to change wheelspeed precentage
   if ( Serial.available() > 0) {
     int fromSerial = Serial.parseInt(); //Read the data the user has input
 
@@ -286,6 +293,8 @@ void loop(void){
   float tweenedSpeed = oldEnergyPercentage + (speedDiff*easeInOutCubic(myTweenTimer)); // tween the speed
   // set speed (steps id the resolution of the frame interpolation)
   STEPS = 100-tweenedSpeed;
+
+  //Serial.println(tweenedSpeed);
 
   static uint8_t cur_step;
   EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * (STEPS)) ) {  //EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * STEPS) ) { 
