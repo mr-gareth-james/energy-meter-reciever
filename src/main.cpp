@@ -93,6 +93,7 @@ void render_next_frame() {
     int x = NUM_LEDS-startIndex;
     if(i==x){next_frame[i] += CHSV( 170, 255, 130); // this lights the next in the loop
     ;}
+    
   }
 }
 
@@ -277,6 +278,11 @@ void loop(void){
     myTweenTimer = 0;
     // set the 
     energyPercentage = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
+
+    //flash display when data updates
+    for ( int i = 0; i < NUM_LEDS; i++) {
+      next_frame[i] += CHSV( 255, 255, 50); // this fades like the fadetoblack with hue
+    }
   }
 
   // OR use serial to change wheelspeed precentage
@@ -289,16 +295,18 @@ void loop(void){
     myTweenTimer = 0;
     // set the 
     energyPercentage = fromSerial;
+
+        //flash display when data updates
+    for ( int i = 0; i < NUM_LEDS; i++) {
+      next_frame[i] += CHSV( 255, 255, 50); // this fades like the fadetoblack with hue
+    }
   }
   
-// animate! - this is the frameblending script
-
+  // animate! - this is the frameblending script
   int speedDiff = energyPercentage-oldEnergyPercentage; // work out the difference in speed from the data
   float tweenedSpeed = oldEnergyPercentage + (speedDiff*easeInOutCubic(myTweenTimer)); // tween the speed
   // set speed (steps id the resolution of the frame interpolation)
   STEPS = 100-tweenedSpeed;
-
-  //Serial.println(tweenedSpeed);
 
   static uint8_t cur_step;
   EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * (STEPS)) ) {  //EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * STEPS) ) { 
@@ -316,12 +324,4 @@ void loop(void){
     // keep driving show for the temporal dithering
     FastLED.show();
   }
-
-/*
-  // this is a bit random here  
-  // its the left right swinging one, 
-  // the rest is animatd in the 'render_next_frame' function
-  int pos = beatsin16(tweenedSpeed/20,0,NUM_LEDS);
-  next_frame[pos] += CHSV( 170, 255, 30);
-*/
 }
