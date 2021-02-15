@@ -21,13 +21,11 @@ const uint64_t pipe = 0xE6E6E6E6E6E6; // Needs to be the same for communicating 
 #define NUM_LEDS 105
 #define DATA_PIN 6
 CRGB leds[NUM_LEDS]; // memory block for leds
-int dot=1; // for strip
-uint8_t gHue = 0; // rotating "base color" used by many of the patterns
 
 // frame blending animation 
 #define ANIM_FPS 255
 // the number of steps you want between each frame - should be a power of 2 to keep things sane - e.g. 2,4,8,16,32,64
-int STEPS = 1;
+int STEPS = 2;
 #define SCALE_PER_STEP (256 / STEPS) 
 CRGB old_frame[NUM_LEDS];
 CRGB next_frame[NUM_LEDS];
@@ -44,6 +42,18 @@ int energyPercentage = 0;
 int oldEnergyPercentage=0;
 int len = sizeof(SensorMaxNumbers)/sizeof(float);
 
+// reset eeprom //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void reset_eeprom(){
+
+  for (int i = 0 ; i < EEPROM.length() ; i++) {
+    EEPROM.write(i, 0);
+  }
+
+  float SensorMinNumbers[] = {100,100,100,100,100,100,100,100,100,100};
+  float SensorMaxNumbers[] = {0,0,0,0,0,0,0,0,0,0};
+  EEPROM.put(0, SensorMinNumbers);
+  EEPROM.put(50, SensorMaxNumbers);
+}
 
 // Setup ///////////////////////////////////////////////////////////////////////////////////////////////////
 void setup(void){
@@ -76,6 +86,13 @@ void setup(void){
   Serial.print(SensorMaxNumbers[0]);
   Serial.print(",");
   Serial.println(SensorMaxNumbers[9]);
+
+  if (isnan(SensorMaxNumbers[9])){
+    Serial.println("NAN! found");
+    reset_eeprom();
+  }else{
+    Serial.println("NAN! not found");
+  }
 }
 
 // Render next ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -251,43 +268,48 @@ static int processData(float sensorData){
   return CurrentReadingPercent;
 }
 
-// reset eeprom //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void reset_eeprom(){
-  float SensorMinNumbers[] = {100,100,100,100,100,100,100,100,100,100};
-  float SensorMaxNumbers[] = {0,0,0,0,0,0,0,0,0,0};
-  EEPROM.put(0, SensorMinNumbers);
-  EEPROM.put(50, SensorMaxNumbers);
-}
-
 ///LOOP //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop(void){ 
-
-
-  
   if (myTweenTimer<1){
-    myTweenTimer+=0.01;
+    myTweenTimer+=0.001;
   }else{
     myTweenTimer=1;
   }
 
   while (radio.available()){
     radio.read(&ReceivedMessage, sizeof(ReceivedMessage)); // Read information from the NRF24L01
+    int fromRadio = processData(ReceivedMessage[0]);// pass the data to be processed - high low average and turn it into a percentage for speed
+
+    //flash display when data updates - red if higher, green if lower
+    for ( int i = 0; i < NUM_LEDS; i++) {
+      if(energyPercentage<fromRadio){
+      next_frame[i] += CHSV( 255, 255, 50); // this fades like the fadetoblack with hue
+      }else{
+      next_frame[i] += CHSV( 120, 255, 50); // this fades like the fadetoblack with hue
+      }
+    }
+
     // save oldWheelSpeed
     oldEnergyPercentage = energyPercentage;
     // start timer
     myTweenTimer = 0;
     // set the 
-    energyPercentage = processData(ReceivedMessage[0]); // pass the data to be processed - high low average and turn it into a percentage for speed
-
+    energyPercentage = fromRadio; 
     //flash display when data updates
-    for ( int i = 0; i < NUM_LEDS; i++) {
-      next_frame[i] += CHSV( 255, 255, 50); // this fades like the fadetoblack with hue
-    }
   }
 
   // OR use serial to change wheelspeed precentage
   if ( Serial.available() > 0) {
     int fromSerial = Serial.parseInt(); //Read the data the user has input
+
+    //flash display when data updates - red if higher, green if lower
+    for ( int i = 0; i < NUM_LEDS; i++) {
+      if(energyPercentage<fromSerial){
+      next_frame[i] += CHSV( 255, 255, 50); // this fades like the fadetoblack with hue
+      }else{
+      next_frame[i] += CHSV( 120, 255, 50); // this fades like the fadetoblack with hue
+      }
+    }
 
     // save oldWheelSpeed
     oldEnergyPercentage = energyPercentage;
@@ -295,18 +317,13 @@ void loop(void){
     myTweenTimer = 0;
     // set the 
     energyPercentage = fromSerial;
-
-        //flash display when data updates
-    for ( int i = 0; i < NUM_LEDS; i++) {
-      next_frame[i] += CHSV( 255, 255, 50); // this fades like the fadetoblack with hue
-    }
   }
   
   // animate! - this is the frameblending script
   int speedDiff = energyPercentage-oldEnergyPercentage; // work out the difference in speed from the data
   float tweenedSpeed = oldEnergyPercentage + (speedDiff*easeInOutCubic(myTweenTimer)); // tween the speed
   // set speed (steps id the resolution of the frame interpolation)
-  STEPS = 100-tweenedSpeed;
+  STEPS = int(100-tweenedSpeed);
 
   static uint8_t cur_step;
   EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * (STEPS)) ) {  //EVERY_N_MILLISECONDS(1000 / (ANIM_FPS * STEPS) ) { 
