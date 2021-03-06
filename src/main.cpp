@@ -19,7 +19,7 @@ const uint64_t pipe = 0xE6E6E6E6E6E6; // Needs to be the same for communicating 
 // fast led
 #include <FastLED.h>
 #define NUM_LEDS 105
-#define DATA_PIN 6
+#define DATA_PIN 8
 CRGB leds[NUM_LEDS]; // memory block for leds
 
 // frame blending animation 
